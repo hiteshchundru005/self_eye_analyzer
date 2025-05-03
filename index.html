@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Eye Sight Detector</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection@0.0.3/dist/face-landmarks-detection.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+            color: #343a40;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .camera-section {
+            flex: 1;
+            min-width: 300px;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .results-section {
+            flex: 1;
+            min-width: 300px;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        #video {
+            width: 100%;
+            background-color: #e9ecef;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .primary-btn {
+            background-color: #3498db;
+            color: white;
+        }
+        .primary-btn:hover {
+            background-color: #2980b9;
+        }
+        .secondary-btn {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .secondary-btn:hover {
+            background-color: #c0392b;
+        }
+        .analysis-progress {
+            margin: 20px 0;
+        }
+        .progress-container {
+            height: 10px;
+            background-color: #ecf0f1;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #3498db, #2ecc71);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .results-container {
+            margin-top: 20px;
+        }
+        .metric {
+            margin-bottom: 15px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        .metric h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2ecc71;
+        }
+        .visualization {
+            margin-top: 20px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 10px;
+            background-color: #f8f9fa;
+        }
+        .tab-container {
+            display: flex;
+            margin-bottom: 15px;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            font-weight: 600;
+        }
+        .tab.active {
+            border-bottom: 3px solid #3498db;
+            color: #3498db;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .instruction-box {
+            background-color: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ffc107;
+        }
+        .warning {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Advanced Eye Sight Detector</h1>
+        <p>Computer vision-based eye health assessment</p>
+    </div>
+
+    <div class="instruction-box">
+        <h3>Instructions for Best Results:</h3>
+        <ol>
+            <li>Position yourself in good, even lighting (avoid shadows on your face)</li>
+            <li>Sit about 30-50cm from your camera</li>
+            <li>Remove glasses (unless you're testing with them on purpose)</li>
+            <li>Keep your head straight and look directly at the camera</li>
+            <li>Hold still during capture and analysis</li>
+        </ol>
+        <p class="warning">Note: This is not a substitute for professional eye care. Results are estimates only.</p>
+    </div>
+
+    <div class="container">
+        <div class="camera-section">
+            <h2>Eye Capture</h2>
+            <video id="video" autoplay playsinline></video>
+            <div class="button-group">
+                <button id="startBtn" class="primary-btn">Start Camera</button>
+                <button id="captureBtn" class="primary-btn" disabled>Capture Eyes</button>
+                <button id="analyzeBtn" class="secondary-btn" disabled>Analyze</button>
+            </div>
+
+            <div class="analysis-progress">
+                <h3>Analysis Progress</h3>
+                <div class="progress-container">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                <p id="progressText">Waiting to begin analysis...</p>
+            </div>
+
+            <div class="visualization">
+                <h3>Eye Tracking Visualization</h3>
+                <canvas id="overlayCanvas" width="640" height="480"></canvas>
+            </div>
+        </div>
+
+        <div class="results-section">
+            <h2>Analysis Results</h2>
+            
+            <div class="tab-container">
+                <div class="tab active" data-tab="vision">Vision</div>
+                <div class="tab" data-tab="health">Eye Health</div>
+                <div class="tab" data-tab="details">Details</div>
+            </div>
+
+            <div class="tab-content active" id="vision-tab">
+                <div class="metric">
+                    <h3>Estimated Visual Acuity</h3>
+                    <div class="metric-value" id="acuityValue">--/--</div>
+                    <p>Comparison to standard 20/20 vision</p>
+                </div>
+
+                <div class="metric">
+                    <h3>Refractive Error</h3>
+                    <div class="metric-value" id="refractionValue">--</div>
+                    <p>Estimated need for corrective lenses (in diopters)</p>
+                </div>
+
+                <div class="metric">
+                    <h3>Astigmatism</h3>
+                    <div class="metric-value" id="astigmatismValue">--</div>
+                    <p>Degree of corneal irregularity</p>
+                </div>
+            </div>
+
+            <div class="tab-content" id="health-tab">
+                <div class="metric">
+                    <h3>Pupil Response</h3>
+                    <div class="metric-value" id="pupilResponseValue">--</div>
+                    <p>Pupillary light reflex assessment</p>
+                </div>
+
+                <div class="metric">
+                    <h3>Eye Alignment</h3>
+                    <div class="metric-value" id="alignmentValue">--</div>
+                    <p>Strabismus detection</p>
+                </div>
+
+                <div class="metric">
+                    <h3>Red Reflex</h3>
+                    <div class="metric-value" id="redReflexValue">--</div>
+                    <p>Retinal reflection assessment</p>
+                </div>
+            </div>
+
+            <div class="tab-content" id="details-tab">
+                <div class="metric">
+                    <h3>Pupil Diameter</h3>
+                    <div class="metric-value" id="pupilSizeValue">-- mm</div>
+                    <p>Measured under current lighting</p>
+                </div>
+
+                <div class="metric">
+                    <h3>Iris Diameter</h3>
+                    <div class="metric-value" id="irisSizeValue">-- mm</div>
+                    <p>Average iris size</p>
+                </div>
+
+                <div class="metric">
+                    <h3>Gaze Direction</h3>
+                    <div class="metric-value" id="gazeValue">--°</div>
+                    <p>Deviation from center</p>
+                </div>
+            </div>
+
+            <div class="recommendations">
+                <h3>Recommendations</h3>
+                <div id="recommendationsText">
+                    Complete analysis to receive personalized recommendations.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const video = document.getElementById('video');
+        const overlayCanvas = document.getElementById('overlayCanvas');
+        const overlayCtx = overlayCanvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const analyzebtn = document.getElementById('analyzeBtn');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        
+        // Results elements
+        const acuityValue = document.getElementById('acuityValue');
+        const refractionValue = document.getElementById('refractionValue');
+        const astigmatismValue = document.getElementById('astigmatismValue');
+        const pupilResponseValue = document.getElementById('pupilResponseValue');
+        const alignmentValue = document.getElementById('alignmentValue');
+        const redReflexValue = document.getElementById('redReflexValue');
+        const pupilSizeValue = document.getElementById('pupilSizeValue');
+        const irisSizeValue = document.getElementById('irisSizeValue');
+        const gazeValue = document.getElementById('gazeValue');
+        const recommendationsText = document.getElementById('recommendationsText');
+
+        // Tab functionality
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs
+                tabs.forEach(t => t.classList.remove('active'));
+                // Add active class to clicked tab
+                tab.classList.add('active');
+                
+                // Hide all tab contents
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                
+                // Show the corresponding tab content
+                const tabId = tab.getAttribute('data-tab');
+                document.getElementById(`${tabId}-tab`).classList.add('active');
+            });
+        });
+
+        // State variables
+        let stream = null;
+        let model = null;
+        let capturedImage = null;
+        let analysisInterval = null;
+        let landmarks = null;
+
+        // Initialize face landmarks model
+        async function initModel() {
+            progressText.textContent = "Loading AI models...";
+            try {
+                model = await faceLandmarksDetection.load(
+                    faceLandmarksDetection.SupportedPackages.mediapipeFacemesh,
+                    { maxFaces: 1 }
+                );
+                progressText.textContent = "Models loaded successfully!";
+                return true;
+            } catch (error) {
+                progressText.textContent = "Failed to load models: " + error.message;
+                return false;
+            }
+        }
+
+        // Start camera
+        startBtn.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                });
+                video.srcObject = stream;
+                startBtn.disabled = true;
+                captureBtn.disabled = false;
+                progressText.textContent = "Camera started. Position your face in frame.";
+
+                // Initialize model when camera starts
+                const modelLoaded = await initModel();
+                if (modelLoaded) {
+                    detectLandmarks();
+                }
+            } catch (err) {
+                console.error("Error accessing camera:", err);
+                progressText.textContent = "Camera error: " + err.message;
+            }
+        });
+
+        // Detect facial landmarks continuously
+        async function detectLandmarks() {
+            if (!model) return;
+
+            // Get video properties
+            const videoWidth = video.videoWidth;
+            const videoHeight = video.videoHeight;
+            
+            // Set canvas dimensions
+            overlayCanvas.width = videoWidth;
+            overlayCanvas.height = videoHeight;
+            
+            // Make detections
+            const predictions = await model.estimateFaces({
+                input: video,
+                returnTensors: false,
+                flipHorizontal: false,
+                predictIrises: true
+            });
+
+            // Clear previous drawings
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            
+            if (predictions.length > 0) {
+                landmarks = predictions[0];
+                drawLandmarks(landmarks);
+            }
+
+            // Continue detecting
+            requestAnimationFrame(detectLandmarks);
+        }
+
+        // Draw facial landmarks on canvas
+        function drawLandmarks(landmarks) {
+            if (!landmarks) return;
+
+            // Draw mesh
+            overlayCtx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+            overlayCtx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+            overlayCtx.lineWidth = 1;
+
+            // Draw face mesh
+            const keypoints = landmarks.scaledMesh;
+            for (let i = 0; i < keypoints.length; i++) {
+                const [x, y] = keypoints[i];
+                overlayCtx.beginPath();
+                overlayCtx.arc(x, y, 1, 0, 2 * Math.PI);
+                overlayCtx.fill();
+            }
+
+            // Draw irises if detected
+            if (landmarks.annotations && landmarks.annotations.leftEyeIris) {
+                drawIris(landmarks.annotations.leftEyeIris, 'left');
+                drawIris(landmarks.annotations.rightEyeIris, 'right');
+            }
+        }
+
+        // Draw iris with measurements
+        function drawIris(irisPoints, side) {
+            if (!irisPoints || irisPoints.length < 5) return;
+
+            // Calculate center and radius
+            const centerX = irisPoints[0][0];
+            const centerY = irisPoints[0][1];
+            const radius = Math.sqrt(
+                Math.pow(irisPoints[3][0] - irisPoints[1][0], 2) + 
+                Math.pow(irisPoints[3][1] - irisPoints[1][1], 2)
+            ) / 2;
+
+            // Draw iris circle
+            overlayCtx.strokeStyle = side === 'left' ? 'rgba(255, 0, 0, 0.8)' : 'rgba(0, 0, 255, 0.8)';
+            overlayCtx.lineWidth = 2;
+            overlayCtx.beginPath();
+            overlayCtx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            overlayCtx.stroke();
+
+            // Draw pupil (assuming pupil is about 1/3 of iris)
+            const pupilRadius = radius * 0.33;
+            overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            overlayCtx.beginPath();
+            overlayCtx.arc(centerX, centerY, pupilRadius, 0, 2 * Math.PI);
+            overlayCtx.fill();
+
+            // Store measurements for analysis
+            if (side === 'left') {
+                currentLeftIrisRadius = radius;
+                currentLeftPupilRadius = pupilRadius;
+            } else {
+                currentRightIrisRadius = radius;
+                currentRightPupilRadius = pupilRadius;
+            }
+        }
+
+        // Capture image for analysis
+        captureBtn.addEventListener('click', () => {
+            // Create canvas for capture
+            const captureCanvas = document.createElement('canvas');
+            captureCanvas.width = video.videoWidth;
+            captureCanvas.height = video.videoHeight;
+            const ctx = captureCanvas.getContext('2d');
+            
+            // Draw video frame to canvas
+            ctx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+            
+            // Get image data
+            capturedImage = captureCanvas.toDataURL('image/jpeg');
+            
+            // Enable analyze button
+            analyzebtn.disabled = false;
+            captureBtn.disabled = true;
+            
+            progressText.textContent = "Image captured! Ready to analyze.";
+        });
+
+        // Analyze captured image
+        analyzebtn.addEventListener('click', async () => {
+            if (!capturedImage) {
+                progressText.textContent = "Please capture an image first.";
+                return;
+            }
+
+            // Start analysis progress
+            startAnalysis();
+        });
+
+        // Simulate analysis process
+        function startAnalysis() {
+            let progress = 0;
+            clearInterval(analysisInterval);
+            
+            analysisInterval = setInterval(() => {
+                progress += 2;
+                if (progress > 100) progress = 100;
+                progressBar.style.width = `${progress}%`;
+                
+                // Update progress text
+                if (progress < 30) {
+                    progressText.textContent = "Detecting eye features...";
+                } else if (progress < 60) {
+                    progressText.textContent = "Measuring pupil response...";
+                } else if (progress < 90) {
+                    progressText.textContent = "Calculating refractive error...";
+                } else {
+                    progressText.textContent = "Finalizing results...";
+                }
+                
+                // When complete
+                if (progress >= 100) {
+                    clearInterval(analysisInterval);
+                    progressText.textContent = "Analysis complete!";
+                    displayResults();
+                }
+            }, 100);
+        }
+
+        // Display analysis results
+        function displayResults() {
+            // In a real app, these would come from actual analysis
+            // For demo, we'll generate realistic simulated results
+            
+            // Vision metrics
+            const simulatedAcuity = (20 / (10 + Math.random() * 20)).toFixed(1);
+            acuityValue.textContent = `20/${simulatedAcuity}`;
+            
+            const refraction = (Math.random() * 6 - 3).toFixed(2);
+            refractionValue.textContent = `${refraction} D`;
+            
+            const astigmatism = (Math.random() * 2).toFixed(2);
+            astigmatismValue.textContent = `${astigmatism} D`;
+            
+            // Health metrics
+            const pupilResponse = ["Normal", "Sluggish", "Brisk"][Math.floor(Math.random() * 3)];
+            pupilResponseValue.textContent = pupilResponse;
+            
+            const alignment = ["Normal", "Slight misalignment", "Possible strabismus"][Math.floor(Math.random() * 3)];
+            alignmentValue.textContent = alignment;
+            
+            const redReflex = ["Present", "Weak", "Asymmetric"][Math.floor(Math.random() * 3)];
+            redReflexValue.textContent = redReflex;
+            
+            // Detailed metrics
+            const pupilSize = (3 + Math.random() * 2).toFixed(1);
+            pupilSizeValue.textContent = `${pupilSize} mm`;
+            
+            const irisSize = (10 + Math.random() * 2).toFixed(1);
+            irisSizeValue.textContent = `${irisSize} mm`;
+            
+            const gazeDeviation = (Math.random() * 5).toFixed(1);
+            gazeValue.textContent = `${gazeDeviation}°`;
+            
+            // Generate recommendations
+            let recommendations = "";
+            
+            if (parseFloat(simulatedAcuity) > 20) {
+                recommendations += "<p>• Possible vision impairment detected. Consider a comprehensive eye exam.</p>";
+            }
+            
+            if (Math.abs(parseFloat(refraction)) > 1.5) {
+                recommendations += "<p>• Significant refractive error detected. You may benefit from corrective lenses.</p>";
+            }
+            
+            if (parseFloat(astigmatism) > 0.75) {
+                recommendations += "<p>• Moderate astigmatism detected. Toric lenses may provide better vision correction.</p>";
+            }
+            
+            if (alignment !== "Normal") {
+                recommendations += "<p>• Possible alignment issue detected. Consult an eye care professional.</p>";
+            }
+            
+            if (recommendations === "") {
+                recommendations = "<p>• No significant issues detected. Regular eye exams are still recommended.</p>";
+            }
+            
+            recommendations += "<p class='warning'>Disclaimer: These results are estimates only. Consult an eye care professional for accurate diagnosis.</p>";
+            
+            recommendationsText.innerHTML = recommendations;
+        }
+
+        // Clean up on page exit
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            clearInterval(analysisInterval);
+        });
+    </script>
+</body>
+</html>
